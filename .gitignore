@@ -1,0 +1,83 @@
+# ------------------------------------------------------------
+# Android / Gradle
+# ------------------------------------------------------------
+**/build/
+.gradle/
+**/.gradle/
+local.properties
+
+# NDK / CMake / external native builds
+.cxx/
+**/.cxx/
+**/externalNativeBuild/
+
+# ------------------------------------------------------------
+# Android Studio / IntelliJ
+# ------------------------------------------------------------
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+
+# (Optional) keep shared run configs out of git
+.idea/runConfigurations/
+
+# ------------------------------------------------------------
+# Kotlin / Java / tooling caches
+# ------------------------------------------------------------
+**/kotlin/
+**/.kotlin/
+
+# ------------------------------------------------------------
+# OS junk
+# ------------------------------------------------------------
+.DS_Store
+Thumbs.db
+
+# ------------------------------------------------------------
+# Logs & temp
+# ------------------------------------------------------------
+*.log
+**/logs/
+tmp/
+temp/
+
+# ------------------------------------------------------------
+# Builds / artifacts you should not commit
+# ------------------------------------------------------------
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+
+# ------------------------------------------------------------
+# Crashlytics / Firebase (only if generated locally)
+# ------------------------------------------------------------
+com_crashlytics_export_strings.xml
+crashlytics.properties
+fabric.properties
+
+# ------------------------------------------------------------
+# Secrets / signing (IMPORTANT)
+# ------------------------------------------------------------
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.der
+*.key
+key.properties
+signing.properties
+
+# ------------------------------------------------------------
+# Misc Android Studio captures
+# ------------------------------------------------------------
+captures/
+**/captures/
+
+# JVM heap dumps
+*.hprof
+java_pid*.hprof

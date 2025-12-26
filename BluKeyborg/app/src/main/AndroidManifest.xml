@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
+
+<!-- 		android:roundIcon="@mipmap/ic_launcher_round"		-->
+
+    <application
+        android:name=".BluKeyborgApp"
+        android:allowBackup="true"
+		android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.BluKeyborg">
+
+        <activity
+            android:name="com.blu.blukeyborg.OutputDeviceSettingsActivity"
+            android:exported="false"
+            android:label="@string/title_output_device" />
+
+        <activity
+            android:name=".MainActivity"
+			android:screenOrientation="portrait"
+			android:windowSoftInputMode="stateHidden|adjustResize"
+			android:configChanges="orientation|screenSize|keyboardHidden"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+		
+		<activity
+			android:name=".FullKeyboardActivity"
+			android:screenOrientation="landscape"
+			android:exported="false"
+			android:theme="@style/Theme.BluKeyborg" />	
+			
+		<activity
+			android:name=".RemoteControlActivity"
+			android:exported="false"
+			android:showWhenLocked="true"
+			android:turnScreenOn="true"
+			android:excludeFromRecents="true"
+			android:launchMode="singleTask"
+			android:theme="@style/Theme.BluKeyborg">
+		</activity>	
+		
+		<!-- share input -->
+		<activity
+			android:name=".ShareSendPopupActivity"
+			android:exported="true"
+			android:excludeFromRecents="true"
+			android:launchMode="singleTask"
+			android:theme="@style/Theme.BluKeyborg.SharePopup">
+
+			<intent-filter>
+				<action android:name="android.intent.action.SEND" />
+				<category android:name="android.intent.category.DEFAULT" />
+				<data android:mimeType="text/plain" />
+			</intent-filter>
+		</activity>	
+		
+		<!-- KeePassDX -->
+		<service
+			android:name=".keepassdx.OutputCredentialsService"
+			android:exported="true">
+			<intent-filter>
+				<action android:name="org.keepassdx.intent.action.OUTPUT_CREDENTIALS_SERVICE" />
+				<category android:name="android.intent.category.DEFAULT" />
+			</intent-filter>
+		</service>
+				
+		<!-- KP2A Plugin: Access + Actions -->
+		<receiver
+			android:name=".kp2a.Kp2aAccessReceiver"
+			android:exported="true">
+			<intent-filter>
+				<action android:name="keepass2android.ACTION_TRIGGER_REQUEST_ACCESS" />
+				<action android:name="keepass2android.ACTION_RECEIVE_ACCESS" />
+				<action android:name="keepass2android.ACTION_REVOKE_ACCESS" />
+			</intent-filter>
+		</receiver>
+
+		<receiver
+			android:name=".kp2a.Kp2aActionReceiver"
+			android:exported="true">
+			<intent-filter>
+				<action android:name="keepass2android.ACTION_OPEN_ENTRY" />
+				<action android:name="keepass2android.ACTION_ENTRY_OUTPUT_MODIFIED" />
+				<action android:name="keepass2android.ACTION_ENTRY_ACTION_SELECTED" />
+			</intent-filter>
+		</receiver>
+				
+    </application>
+</manifest>

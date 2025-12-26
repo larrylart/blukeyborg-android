@@ -103,6 +103,7 @@ object BleHub
 		bleConnected.postValue(isUp)
 
 		if (!isUp) {
+			setTarget(null)  
 			// BLE transport is down => secure session is invalid
 			_connected.postValue(false)
 			mtls = null
@@ -415,7 +416,7 @@ object BleHub
 				timeoutMs = 5000L,          // total banner/handshake timeout
 				retries = 1,
 				allowPrompt = false,        // no UI at startup
-				suppressAutoDisable = false,
+				suppressAutoDisable = true,	// was false - not to disable when looking for multi dongle 
 				connectTimeoutMs = 3500L    // pass through to BluetoothDeviceManager.connect()
 			) { ok, err ->
 				if (ok) {
@@ -583,6 +584,9 @@ object BleHub
 				return
 			}	
 			
+			// FIX MULTI DONGLE: pin all subsequent traffic (C1/C2, D0/D1, etc.) to THIS candidate
+			setTarget(address)			
+			
             ensureMgr().connect(address, connectTimeoutMs) { ok, err ->
 				logd("CONNECT: connect() callback for $address ok=$ok err=$err")
 				if (ok) setBleUp(true) else setBleUp(false)
@@ -708,6 +712,7 @@ object BleHub
 			suppressAutoConnectFor(suppressMs)
 		}
 
+		setTarget(null)
 		ensureMgr().disconnect()
 		setBleUp(false)
 	}	
@@ -923,7 +928,10 @@ object BleHub
 		addressOverride: String? = null,
 		cb: (Boolean, String?) -> Unit
 	) {
-		val addr = addressOverride ?: PreferencesUtil.getOutputDeviceId(appCtx)
+		//val addr = addressOverride ?: PreferencesUtil.getOutputDeviceId(appCtx)
+		// fix for multi dongle connect attempts
+		val addr = addressOverride ?: currentAddress ?: PreferencesUtil.getOutputDeviceId(appCtx)
+		
 		if (addr.isNullOrBlank()) {
 			cb(false, "No device")
 			return
@@ -1420,10 +1428,19 @@ object BleHub
 		}
 		val inner = byteArrayOf(op.toByte()) + u16le(payload.size) + payload
 		val b3 = wrapB3(inner)
-		val addr = PreferencesUtil.getOutputDeviceId(appCtx) ?: run { onResult(false, "No device"); return }
+		
+		/*val addr = PreferencesUtil.getOutputDeviceId(appCtx) ?: run { onResult(false, "No device"); return }
 		ensureMgr().writeOrConnect(addr, SERVICE_UUID, CHAR_UUID, b3) { okW, errW ->
 			onResult(okW, errW)
-		}
+		}*/
+		
+		// to fix multi dongle connect attempts
+		val addr = currentAddress ?: PreferencesUtil.getOutputDeviceId(appCtx)
+			?: run { onResult(false, "No device"); return }
+
+		ensureMgr().writeOrConnect(addr, SERVICE_UUID, CHAR_UUID, b3) { okW, errW ->
+			onResult(okW, errW)
+		}		
 	}
 
 	////////////////////////////////////////////////////////////////////	

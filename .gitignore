@@ -81,3 +81,6 @@ captures/
 # JVM heap dumps
 *.hprof
 java_pid*.hprof
+BluKeyborg/app/release/baselineProfiles/0/app-release.dm
+BluKeyborg/app/release/baselineProfiles/1/app-release.dm
+BluKeyborg/app/release/baselineProfiles/0/app-release.dm

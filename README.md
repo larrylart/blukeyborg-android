@@ -1,10 +1,11 @@
-# 💙 BluKeyborg v1.0 — First Release
+## 💙 BluKeyborg v1.0.2 — Secure Provisioning & App Integration Release
 
-BluKeyborg is an Android companion app for the **Blue Keyboard Dongle**, allowing you to securely send text, passwords, and special keyboard commands to your computer/device through BLE-to-USB HID.
+BluKeyborg is an Android companion app for the **Blue Keyboard Dongle**, allowing you to securely send text, passwords, and special keyboard commands to your computer or device through BLE-to-USB HID.
 
-This **v1.0 first release** provides the complete user workflow:
+This **v1.0.2 release** builds on the original v1.0 foundation and introduces **simplified provisioning, consistent mTLS security, and deep integration with password managers and other Android apps**.
 
-**Type text on the phone → secure BLE transmission → dongle → USB HID typing on the host PC/Mac/Linux.**
+> ⚠️ **Firmware requirement:**  
+> BluKeyborg v1.0.2 **requires Blue Keyboard firmware v2.0.0 or newer**.
 
 ---
 
@@ -17,14 +18,13 @@ BluKeyborg provides:
 - A full-screen raw keyboard  
 - A special-keys panel (arrows, delete, function keys, etc.)  
 - A send-history panel  
-- A way to send two key codes using the phone volume up/down - configurable in settings
-- Integration with the dongle's micro-command protocol for text and keycode transmission
+- A way to send two key codes using the phone volume up/down (configurable in settings)  
+- Secure provisioning and mTLS session handling  
+- Integration points for password managers and external apps  
 
 ---
 
 ## 🖼️ Screenshots
-
-> Replace the image paths below with your actual screenshot files.
 
 ### Main Screen
 ![Main Screen](doc/BluKeyborg_main_screen_anno.jpg)
@@ -51,68 +51,121 @@ BluKeyborg provides:
 
 ---
 
-## 🚀 Features in v1.0
+## 🚀 What’s New in v1.0.2
 
-### ✓ Manual Text Sending
+### 🔐 Simplified Provisioning & mTLS Consistency
+- New streamlined provisioning flow  
+- More consistent and robust mTLS session handling  
+- Removes legacy edge-cases from earlier handshake logic  
+- **Requires Blue Keyboard firmware v2.0.0**
+
+---
+
+### 📤 Type Text from Other Apps (Android Share)
+BluKeyborg can now receive text from **any Android app** via the **Share** menu.
+
+**How it works:**
+- Select text in another app  
+- Tap **Share**  
+- Choose **BluKeyborg**  
+- The text is sent securely to the dongle and typed on the host  
+
+⚙️ **Note:**  
+This feature must be explicitly enabled in **Settings → Share / External Input**.
+
+---
+
+### 🔑 KeePass2Android (KP2A) Integration
+BluKeyborg can now act as an **external output device** for **KeePass2Android (KP2A)**.
+
+**How to use:**
+1. Enable KP2A integration in BluKeyborg settings  
+2. Enable the BluKeyborg plugin inside KeePass2Android  
+3. When KP2A shows the plugin confirmation dialog:  
+   - **Rotate the phone to landscape**  
+   - Due to a KP2A immersive-mode bug, the **Accept** button is not visible or usable in portrait mode  
+
+Once enabled, credentials can be securely typed via the Blue Keyboard dongle.
+
+---
+
+### 🔐 KeePassDX Integration (New AIDL Service)
+BluKeyborg now exposes a dedicated **AIDL service** for **KeePassDX**, enabling a cleaner and more secure integration path.
+
+- No direct BLE handling inside KeePassDX  
+- BluKeyborg remains the single BLE + mTLS authority  
+- Credentials are sent over IPC and securely typed via the dongle  
+
+👉 See the new KeePassDX fork here:  
+https://github.com/larrylart/KeePassDX
+
+---
+
+### 🎮 Basic Media Controls (Remote Panel)
+The remote panel now includes **basic media control buttons**:
+
+- Play / Pause  
+- Stop  
+- Volume Up  
+- Volume Down  
+
+✅ Works reliably with PCs  
+⚠️ Partial compatibility with TVs and media boxes  
+
+> Different vendors use different HID / consumer-control codes — this area will be refined in future releases.
+
+---
+
+## ✅ Core Features (Carried Over from v1.0)
+
+### Manual Text Sending
 Write any text in the input field and send it directly to the dongle.
 
 BluKeyborg will:
-
 - Send the text via BLE  
-- Verify the dongle's response  
+- Verify the dongle’s response  
 - Append the sent text to the history  
-- Clear the input box after successful send  
+- Clear the input box after a successful send  
 
 ---
 
-### ✓ Send History (Session-Based)
-The app shows a scrolling list of previously sent entries:
-
+### Send History (Session-Based)
 - Alternating white / light-gray rows  
 - Auto-scrolls to the newest entry  
-- History resets when the activity or process is recreated
+- History resets when the activity or process is recreated  
 
 ---
 
-### ✓ Full Keyboard Activity
+### Full Keyboard Activity
 A dedicated full-screen keyboard for raw HID typing:
-
-- Launched when fast-keys mode is enabled  
-- Automatically enables fast-keys if needed  
-- Sends raw HID codes via `0xE0` micro-command  
-- Closes via a top-right **X** icon  
+- Automatically enables fast-keys mode  
+- Sends raw HID codes via fast-key commands  
+- Exits via the top-right **X** button  
 
 ---
 
-### ✓ Special Keys Panel
+### Special Keys Panel
 Send HID keys such as:
-
 - Arrow keys  
 - Backspace / Delete  
 - Enter / Tab  
 - Escape  
 - Home / End  
 - Page Up / Page Down  
-- Function Keys (F1–F12)
-
-Each button sends a direct HID keycode to the dongle.
+- Function keys (F1–F12)  
 
 ---
 
-### ✓ Auto-Connect to Preferred Dongle
+### Auto-Connect to Preferred Dongle
 On app start or resume:
-
-- Reads your selected dongle from preferences  
-- Attempts automatic BLE connection  
-- Shows a toast when unreachable  
-- Never blocks the UI  
-- Does **not** disable fast-keys mode  
+- Automatically reconnects to the selected dongle  
+- Non-blocking BLE connection logic  
+- Graceful failure handling if the device is unavailable  
 
 ---
 
-### ✓ Minimal Permissions
-The app requires:
-
+### Minimal Permissions
+BluKeyborg requires:
 - **Bluetooth / BLE permissions only**  
 - No Internet  
 - No storage  
@@ -121,87 +174,95 @@ The app requires:
 
 ---
 
-## 🔧 Internal Architecture (Simplified)
+## 🔧 Internal Architecture (Updated)
 
-BluKeyborg communicates with the dongle using:
+BluKeyborg acts as a **secure hub** between apps and the dongle:
 
 - BLE GATT writes & notifications  
-- Text transmission + MD5 verification  
-- Fast-key HID keycode mode  
-- A connection manager (`BleHub`)  
-- A device selector stored in shared preferences  
+- Binary command protocol  
+- mTLS-secured sessions  
+- Centralized provisioning & key storage  
+- `BleHub` as the single authority for BLE + security  
+- IPC interfaces (AIDL) for password managers  
+
+This design avoids duplicating BLE logic in third-party apps.
 
 ---
 
 ## 📦 Installation
 
 ### 1. Download the APK
-From the GitHub Releases:
+From GitHub Releases:
 
-## Releases → BluKeyborg v1.0
+**Releases → BluKeyborg v1.0.2**
 
+---
 
 ### 2. Pair the Dongle
-Inside BluKeyborg:
+In BluKeyborg:
 
-Settings → Output Device → Scan → Select your dongle
+**Settings → Output Device → Scan → Select your dongle**
 
+---
 
-### 3. Start Sending Text
-Use the text input box or open the full keyboard.
+### 3. Provision & Connect
+Follow the provisioning flow (requires firmware v2.0.0).
+
+---
+
+### 4. Start Sending
+- Manual text  
+- Share from other apps  
+- Password manager integrations  
+- Full keyboard / remote panel  
 
 ---
 
 ## 🗂️ Source Code Structure
+
 ```
 app/src/main/java/com/blu/blukeyborg/
 │
-├── MainActivity.kt # Main UI: send text + local history
+├── MainActivity.kt # Main UI + send history
 ├── FullKeyboardActivity.kt # Raw HID full-screen keyboard
-├── SpecialKeysActivity.kt # Arrow keys, delete, etc.
+├── SpecialKeysActivity.kt # Special keys + media controls
 │
-├── BleHub.kt # BLE protocol + device state handling
-├── BluetoothDeviceManager.kt # Manages selected dongle prefs
+├── BleHub.kt # BLE + provisioning + mTLS
+├── BluetoothDeviceManager.kt # Device scanning & selection
 │
-└── BluKeyborgApp.kt # Application class / global init
+├── keepassdx/ # AIDL service (KeePassDX)
+├── kp2a/ # KP2A plugin integration
+│
+└── BluKeyborgApp.kt # Application init
 ```
+
 
 ---
 
 ## 📄 License
 
-This project is released under the **MIT License**.  
+Released under the **MIT License**.  
 See the `LICENSE` file for details.
 
 ---
 
-## 🤝 Contributing
+## 📢 Notes About v1.0.2
 
-Pull requests are welcome!
+This release marks a **major architectural step**:
 
-You can contribute by:
+- BluKeyborg becomes the **central secure bridge** for all integrations  
+- Password managers no longer need direct BLE access  
+- Provisioning and mTLS are now consistent across platforms  
 
-- Improving UI / UX  
-- Adding new keyboard layouts  
-- Reporting bugs  
-- Requesting new features  
-- Optimizing BLE communication  
-
----
-
-## 📢 Notes About v1.0
-
-This is the first stable release of the BluKeyborg Android companion app.
-
-Planned enhancements for the next releases:
-
-- Encrypted binary protocol onboarding (MTLS)  
-- Persistent send history  
-- Improved full keyboard with layout matching  
-- Support for multiple dongles  
-- Better error reporting & diagnostics  
+Planned next steps:
+- Improved TV / media device compatibility  
+- Multi-dongle profiles  
+- Further UI refinements  
+- Expanded iOS and Linux feature parity  
 
 ---
 
 💙 **Thank you for using BluKeyborg!**  
-More features and improvements are coming soon.
+Security, correctness, and openness remain the core design goals.
+
+

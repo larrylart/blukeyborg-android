@@ -90,6 +90,11 @@ object BleHub
     private val _connected = MutableLiveData(false)
     val connected: LiveData<Boolean> = _connected
 
+	// Idle disconnect timer (shared across UI + AIDL calls) - set at 5m/adjust or make configurable
+	private const val IDLE_DISCONNECT_MS = 5 * 60 * 1000L
+	private val idleHandler by lazy { android.os.Handler(android.os.Looper.getMainLooper()) }
+	private var idleDisconnectArmed = false
+
 	// avoid auto reconnect when disconnecting
 	@Volatile private var suppressAutoConnectUntilMs: Long = 0L
 
@@ -102,7 +107,9 @@ object BleHub
 	private fun setBleUp(isUp: Boolean) {
 		bleConnected.postValue(isUp)
 
-		if (!isUp) {
+		if (isUp) {
+			bumpIdleTimer()
+		} else {
 			setTarget(null)  
 			// BLE transport is down => secure session is invalid
 			_connected.postValue(false)
@@ -226,21 +233,20 @@ object BleHub
 	//    - If that works, run full binary handshake for primary only.
 	//
 	// 4. Fallback path:
-	//    - Run a short RSSI scan over remaining candidates.
-	//    - Sort by strongest signal first.
-	//    - Try each in order with a 1.5s timeout (no password prompt).
+	//    - Sequentially try all provisioned candidates (primary first)
+	//      with a short connect + handshake (no password prompt).
 	//
 	// 5. If all candidates fail:
-	//    - disable auto-connect and show a toast explaining why.
+	//    - Leave the toggle as-is, report failure via callback.
 	//
 	// This function is intentionally "aggressive" at startup, but never
 	// pops UI prompts or password dialogs.
 	////////////////////////////////////////////////////////////////////
-    fun autoConnectFromPrefs(onReady: ((Boolean, String?) -> Unit)? = null) {
-        val useExt = PreferencesUtil.useExternalKeyboardDevice(appCtx)
-        val wasErrorOff = PreferencesUtil.wasOutputDeviceDisabledByError(appCtx)
+	fun autoConnectFromPrefs(onReady: ((Boolean, String?) -> Unit)? = null) {
+		val useExt = PreferencesUtil.useExternalKeyboardDevice(appCtx)
+		val wasErrorOff = PreferencesUtil.wasOutputDeviceDisabledByError(appCtx)
 
-		// chekc if auto connected disabled - usually by a requested disconnect
+		// check if auto connect is disabled - usually by a requested disconnect
 		val now = android.os.SystemClock.elapsedRealtime()
 		if (now < suppressAutoConnectUntilMs) {
 			onReady?.invoke(false, "Auto-connect suppressed")
@@ -252,184 +258,95 @@ object BleHub
 			onReady?.invoke(ok, msg)
 		}
 
-        // If toggle is OFF and it was NOT auto-disabled by an error, respect user choice.
-        if (!useExt && !wasErrorOff) {
-            //onReady?.invoke(false, "Output device disabled in settings")
+		// If toggle is OFF and it was NOT auto-disabled by an error, respect user choice.
+		if (!useExt && !wasErrorOff) {
 			autoDone(false, "Output device disabled in settings")
-            return
-        }
+			return
+		}
 
-        // If Settings has a password prompt provider, back off and let manual flow win.
-        if (passwordPrompt != null) {
-            //onReady?.invoke(false, "Suppressed while in Settings")
+		// If Settings has a password prompt provider, back off and let manual flow win.
+		if (passwordPrompt != null) {
 			autoDone(false, "Suppressed while in Settings")
-            return
-        }
+			return
+		}
 
-        val primary = PreferencesUtil.getOutputDeviceId(appCtx)
-        val baseCandidates = LinkedHashSet<String>().apply {
-            if (!primary.isNullOrBlank()) add(primary)
-            // add all other bonded devices that already have an APPKEY
-            bondedProvisionedAddresses().forEach { add(it) }
-        }.toList()
+		val primary = PreferencesUtil.getOutputDeviceId(appCtx)
 
-        if (baseCandidates.isEmpty()) {
-            logd("AUTO: no provisioned candidates (primary=$primary)")
-            //onReady?.invoke(false, "No provisioned dongles found")
+		val baseCandidates = LinkedHashSet<String>().apply {
+			if (!primary.isNullOrBlank()) add(primary)
+			// add all other bonded devices that already have an APPKEY
+			bondedProvisionedAddresses().forEach { add(it) }
+		}.toList()
+
+		if (baseCandidates.isEmpty()) {
+			logd("AUTO: no provisioned candidates (primary=$primary)")
 			autoDone(false, "No provisioned dongles found")
-            return
-        }
+			return
+		}
 
 		// From this point on we are in an async connect/handshake flow.
 		connectInProgress = true
 
-		// Try to auto-connect using an RSSI pre-scan:
-		//
-		// - Scan for candidates for  aprox. 800ms.
-		// - Order them by strongest RSSI first.
-		// - Try each in sequence with a short connect + handshake.
-		// - Only when ALL fail do we disable autoconnect.
-        fun connectViaScan(candidatesBase: List<String>) {
-            if (candidatesBase.isEmpty()) {
-                logd("AUTO: no remaining candidates for RSSI scan")
-                disableAutoConnect("No provisioned dongle is reachable.")
-                //onReady?.invoke(false, "No dongle reachable")
+		// - Try primary first (if present in baseCandidates) with 3.5s connect timeout.
+		// - Then try all other candidates in the list in order, also via connect().
+		// - Only after ALL fail do we disable auto-connect.
+		val it = baseCandidates.iterator()
+
+		fun tryNext() {
+			if (!it.hasNext()) {
+				// Nothing worked 
+				logd("AUTO: all candidates failed")
+				//disableAutoConnect("No provisioned dongle is reachable.")
 				autoDone(false, "No dongle reachable")
-                return
-            }
+				return
+			}
 
-            val mgr = ensureMgr()
-            val targetSet = candidatesBase.toSet()
+			val addr = it.next()
+			val isPrimary = !primary.isNullOrBlank() && addr.equals(primary, ignoreCase = true)
 
-            // Short scan to see which remaining dongles are actually on-air
-            mgr.scanForRssiOnce(targetSet, durationMs = 800L) { rssiMap ->
-                val seenAddrs = rssiMap.keys.intersect(targetSet)
+			// Connect timeout for this auto-connect flow:
+			//  - Similar to autoConnectForServices but using 3.5s instead of 1.5s.
+			val connectTimeoutMs = 3500L
 
-                val ordered: List<String> =
-                    if (seenAddrs.isNotEmpty()) {
-                        val visibleSorted = seenAddrs
-                            .sortedByDescending { addr -> rssiMap[addr] ?: Int.MIN_VALUE }
+			// Handshake/banner timeout and retries:
+			//  - Keep your existing semantics: primary slightly more "privileged".
+			val bannerTimeoutMs = if (isPrimary) 5000L else 4000L
+			val retries = if (isPrimary) 1 else 2
 
-                        // Try visible (strongest RSSI first), then any we didn't see at all
-                        val out = mutableListOf<String>()
-                        out.addAll(visibleSorted)
-                        val unseen = candidatesBase.filterNot { seenAddrs.contains(it) }
-                        out.addAll(unseen)
-                        out.distinct()
-                    } else {
-                        // Scan saw nothing – fall back to original order
-                        candidatesBase
-                    }
+			logd("AUTO: trying dongle $addr (isPrimary=$isPrimary, connectTimeoutMs=$connectTimeoutMs)")
 
-                logd(
-                    "AUTO: startup candidates after RSSI scan = " +
-                        ordered.joinToString { addr ->
-                            val rssi = rssiMap[addr]
-                            if (rssi != null) "$addr(rssi=$rssi)" else addr
-                        }
-                )
-
-                val it = ordered.iterator()
-
-                fun tryNext() {
-                    if (!it.hasNext()) {
-                        // Nothing worked – now we finally disable autoconnect
-                        logd("AUTO: all candidates failed after scan, disabling autoconnect")
-                        disableAutoConnect("No provisioned dongle is reachable.")
-                        //onReady?.invoke(false, "No dongle reachable")
-						autoDone(false, "No dongle reachable")
-                        return
-                    }
-
-                    val addr = it.next()
-                    logd("AUTO: trying dongle $addr after scan")
-
-                    // Make sure previous connection (if any) is fully dropped before next attempt
-                    try { ensureMgr().disconnect() } catch (_: Throwable) {}
-
-                    var used = false
-
-                    connectAndFetchLayoutSimpleTo(
-                        address = addr,
-                        timeoutMs = 4000L,
-                        retries = 2,
-                        allowPrompt = false,
-                        suppressAutoDisable = true   // do NOT kill autoconnect per-device
-                    ) { ok, err ->
-                        // Guard: ignore any second/late callback for this candidate
-                        if (used) {
-                            logd("AUTO: second callback for $addr ignored (ok=$ok err=$err)")
-                            return@connectAndFetchLayoutSimpleTo
-                        }
-                        used = true
-
-                        if (ok) {
-                            logd("AUTO: connected successfully to $addr – making it active")
-
-                            // Update prefs & current target
-                            PreferencesUtil.setOutputDeviceId(appCtx, addr)
-                            setTarget(addr)
-
-                            // Try to store a friendly name if we can see it
-                            try {
-                                val btMgr = appCtx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
-                                val adapter = btMgr?.adapter
-                                val devName = adapter?.getRemoteDevice(addr)?.name
-                                if (!devName.isNullOrBlank()) {
-                                    PreferencesUtil.setOutputDeviceName(appCtx, devName)
-                                }
-                            } catch (_: Throwable) {
-                                // ignore – name is only cosmetic
-                            }
-
-                            // Keep the toggle ON on success
-                            PreferencesUtil.setUseExternalKeyboardDevice(appCtx, true)
-                            // also clear any "disabled by error" flag
-                            PreferencesUtil.setOutputDeviceDisabledByError(appCtx, false)
-
-                            //onReady?.invoke(true, null)
-							autoDone(true, null)
-							
-                        } else {
-                            logd("AUTO: dongle $addr failed: ${err ?: "unknown"} – trying next")
-                            tryNext()
-                        }
-                    }
-                }
-
-                // Kick off scan-based attempts
-                tryNext()
-            }
-        }
-
-        // 1) Quick path: try to connect to the currently selected dongle BEFORE any scan.
-		if (!primary.isNullOrBlank() && baseCandidates.contains(primary)) {
-			logd("AUTO: attempting full connect+handshake to primary $primary before RSSI scan")
-
-			// Make sure we start from a clean state once, here.
+			// Make sure previous connection (if any) is fully dropped before next attempt
 			try { ensureMgr().disconnect() } catch (_: Throwable) {}
 
-			connectInProgress = true
+			var used = false
 
 			connectAndFetchLayoutSimpleTo(
-				address = primary,
-				timeoutMs = 5000L,          // total banner/handshake timeout
-				retries = 1,
-				allowPrompt = false,        // no UI at startup
-				suppressAutoDisable = true,	// was false - not to disable when looking for multi dongle 
-				connectTimeoutMs = 3500L    // pass through to BluetoothDeviceManager.connect()
+				address = addr,
+				timeoutMs = bannerTimeoutMs,
+				retries = retries,
+				allowPrompt = false,          // no UI at startup
+				suppressAutoDisable = true,   // do NOT kill autoconnect per-device
+				connectTimeoutMs = connectTimeoutMs
 			) { ok, err ->
+				// Guard: ignore any second/late callback for this candidate
+				if (used) {
+					logd("AUTO: second callback for $addr ignored (ok=$ok err=$err)")
+					return@connectAndFetchLayoutSimpleTo
+				}
+				used = true
+
 				if (ok) {
-					logd("AUTO: connected successfully to primary $primary – making it active")
+					logd("AUTO: connected successfully to $addr – making it active")
 
-					PreferencesUtil.setOutputDeviceId(appCtx, primary)
-					setTarget(primary)
+					// Update prefs & current target
+					PreferencesUtil.setOutputDeviceId(appCtx, addr)
+					setTarget(addr)
 
-					// Cosmetic: try to cache device name
+					// Try to store a friendly name if we can see it
 					try {
 						val btMgr = appCtx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
 						val adapter = btMgr?.adapter
-						val devName = adapter?.getRemoteDevice(primary)?.name
+						val devName = adapter?.getRemoteDevice(addr)?.name
 						if (!devName.isNullOrBlank()) {
 							PreferencesUtil.setOutputDeviceName(appCtx, devName)
 						}
@@ -437,25 +354,141 @@ object BleHub
 						// ignore – name is only cosmetic
 					}
 
+					// Keep the toggle ON on success
 					PreferencesUtil.setUseExternalKeyboardDevice(appCtx, true)
+					// also clear any "disabled by error" flag
 					PreferencesUtil.setOutputDeviceDisabledByError(appCtx, false)
 
 					autoDone(true, null)
 				} else {
-					logd("AUTO: primary $primary full connect+handshake failed: ${err ?: "unknown"} – falling back to scan of other dongles")
-
-					val remaining = baseCandidates.filter { it != primary }
-					connectViaScan(remaining)
+					logd("AUTO: dongle $addr failed: ${err ?: "unknown"} – trying next")
+					tryNext()
 				}
 			}
+		}
 
-			// Subsequent work happens via callbacks
+		// Kick off sequential connect-based attempts 
+		tryNext()
+	}
+
+	////////////////////////////////////////////////////////////////////
+	// Auto-connect helper intended for background/service usage (AIDL, plugin, etc).
+	//
+	// - Just loops through provisioned/bonded candidates (primary first)
+	// - Fast connect attempt per device (default 1500ms connect timeout)
+	// - If it connects to a different device than the current preference, it updates prefs
+	// - On total failure: behaves like "connect selected device" (toast/message + onReady false)
+	////////////////////////////////////////////////////////////////////
+	fun autoConnectForServices(
+		onReady: ((Boolean, String?) -> Unit)? = null,
+		perDeviceConnectTimeoutMs: Long = 1500L,
+		perDeviceHandshakeTimeoutMs: Long = 5000L,   // <-- IMPORTANT: was 2500, too short often
+		retries: Int = 0
+	) {
+		val useExt = PreferencesUtil.useExternalKeyboardDevice(appCtx)
+		val wasErrorOff = PreferencesUtil.wasOutputDeviceDisabledByError(appCtx)
+
+		// Respect suppression (e.g., user-requested disconnect)
+		val now = android.os.SystemClock.elapsedRealtime()
+		if (now < suppressAutoConnectUntilMs) {
+			onReady?.invoke(false, "Auto-connect suppressed")
 			return
 		}
 
-        // 2) No primary set (or not provisioned): just do RSSI-based scan over all candidates.
-        connectViaScan(baseCandidates)
-    }
+		// Respect user choice if toggle OFF (and not auto-disabled by error)
+		if (!useExt && !wasErrorOff) {
+			onReady?.invoke(false, "Output device disabled in settings")
+			return
+		}
+
+		// If Settings has a password prompt provider, back off and let manual flow win.
+		if (passwordPrompt != null) {
+			onReady?.invoke(false, "Suppressed while in Settings")
+			return
+		}
+
+		val primary = PreferencesUtil.getOutputDeviceId(appCtx)
+
+		// Candidates: primary first, then other bonded devices that have an APPKEY
+		val candidates = LinkedHashSet<String>().apply {
+			if (!primary.isNullOrBlank()) add(primary)
+			bondedProvisionedAddresses().forEach { add(it) }
+		}.toList()
+
+		if (candidates.isEmpty()) {
+			logd("AUTO-SVC: no provisioned candidates (primary=$primary)")
+			onReady?.invoke(false, "No provisioned dongles found")
+			return
+		}
+
+		// Own connectInProgress for the whole loop (important!)
+		if (connectInProgress) {
+			onReady?.invoke(false, "Connecting to dongle, please wait…")
+			return
+		}
+		connectInProgress = true
+
+		fun done(ok: Boolean, msg: String?) {
+			connectInProgress = false
+			onReady?.invoke(ok, msg)
+		}
+
+		val it = candidates.iterator()
+
+		fun tryNext() {
+			if (!it.hasNext()) {
+				val msg = "No provisioned dongle is reachable."
+				logd("AUTO-SVC: all candidates failed ($msg)")
+				toast(msg)
+				done(false, msg)
+				return
+			}
+
+			val addr = it.next()
+			logd("AUTO-SVC: trying $addr (fast)")
+
+			// Ensure clean state before each attempt
+			try { ensureMgr().disconnect() } catch (_: Throwable) {}
+
+			connectAndEstablishSecureTo(
+				address = addr,
+				connectTimeoutMs = perDeviceConnectTimeoutMs,
+				b0TimeoutMs = perDeviceHandshakeTimeoutMs,
+				retries = retries,
+				manageConnectInProgress = false // <-- IMPORTANT: outer loop owns connectInProgress
+			) { ok, err ->
+
+				if (ok) {
+					// Persist this as the selected device if it differs
+					val prev = PreferencesUtil.getOutputDeviceId(appCtx)
+					if (!addr.equals(prev, ignoreCase = true)) {
+						PreferencesUtil.setOutputDeviceId(appCtx, addr)
+					}
+					setTarget(addr)
+
+					// Optional: cache device name (cosmetic)
+					try {
+						val btMgr = appCtx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+						val adapter = btMgr?.adapter
+						val devName = adapter?.getRemoteDevice(addr)?.name
+						if (!devName.isNullOrBlank()) PreferencesUtil.setOutputDeviceName(appCtx, devName)
+					} catch (_: Throwable) {}
+
+					// Keep toggle ON on success
+					PreferencesUtil.setUseExternalKeyboardDevice(appCtx, true)
+					PreferencesUtil.setOutputDeviceDisabledByError(appCtx, false)
+
+					done(true, null)
+				} else {
+					logd("AUTO-SVC: $addr failed: ${err ?: "unknown"} — trying next")
+					tryNext()
+				}
+			}
+		}
+
+		tryNext()
+	}
+
 
 	////////////////////////////////////////////////////////////////////
 	// Enumerate bonded BT devices and filter to those that already have
@@ -526,6 +559,7 @@ object BleHub
             allowPrompt = allowPrompt,
             suppressAutoDisable = false,
 			connectTimeoutMs = null,      // no watchdog for the manual coonnect path
+			fetchLayout = true,
             onDone = onDone
         )
     }
@@ -558,6 +592,7 @@ object BleHub
         allowPrompt: Boolean,
         suppressAutoDisable: Boolean,
 		connectTimeoutMs: Long? = null,
+		fetchLayout: Boolean = true,
         onDone: ((Boolean, String?) -> Unit)?
     ) {
         fun attempt(left: Int) {
@@ -673,7 +708,8 @@ object BleHub
 							_connected.postValue(okH)
 
 							if (okH) {
-								onSecureSessionReady(address, onDone)
+								//onSecureSessionReady(address, onDone)
+								onSecureSessionReady(address, fetchLayout, onDone)
 								return@doBinaryHandshakeFromB0
 							}
 
@@ -706,7 +742,166 @@ object BleHub
         attempt(retries)
     }
 
+	//////////////////////////////////////////////////////////////////// 
+	// Fast connect path for services/plugins:
+	// - Connect (with connectTimeoutMs)
+	// - Wait for B0
+	// - Require APPKEY (no UI prompts)
+	// - Do MTLS handshake
+	// - DOES NOT call GET_INFO / getLayout
+	//////////////////////////////////////////////////////////////////// 
+	private fun connectAndEstablishSecureTo(
+		address: String,
+		connectTimeoutMs: Long? = 1500L,
+		b0TimeoutMs: Long = 5000L,
+		retries: Int = 0,
+
+		// If true: function uses connectInProgress guard itself.
+		// If false: caller owns connectInProgress (e.g., autoConnectForServices loop).
+		manageConnectInProgress: Boolean = true,
+
+		onDone: ((Boolean, String?) -> Unit)? = null
+	) {
+		if (address.isBlank()) {
+			onDone?.invoke(false, "No device")
+			return
+		}
+
+		if (manageConnectInProgress) {
+			if (connectInProgress) {
+				onDone?.invoke(false, "Connecting to dongle, please wait…")
+				return
+			}
+			connectInProgress = true
+		}
+
+		fun done(ok: Boolean, msg: String?) {
+			if (manageConnectInProgress) connectInProgress = false
+			onDone?.invoke(ok, msg)
+		}
+
+		// Pin traffic to this MAC for the duration of the attempt (multi-dongle safe)
+		setTarget(address)
+
+		// If we’re already secure AND targeting the same device, fast return
+		if (_connected.value == true && (currentAddress?.equals(address, ignoreCase = true) == true)) {
+			done(true, null)
+			return
+		}
+
+		// Service path: no prompt => must already have APPKEY
+		val hasKey = BleAppSec.getKey(appCtx, address) != null
+		if (!hasKey) {
+			done(false, "APPKEY missing")
+			return
+		}
+
+		// Reset MTLS state for this attempt
+		mtls = null
+
+		fun attempt(left: Int) {
+			logd("CONNECT-FAST: attempt left=$left to $address (connectTimeoutMs=$connectTimeoutMs b0TimeoutMs=$b0TimeoutMs)")
+
+			// Ensure clean transport state
+			try { ensureMgr().disconnect() } catch (_: Throwable) {}
+
+			// setBleUp(false) clears target via setTarget(null) in your code,
+			// so re-apply target immediately after.
+			setBleUp(false)
+			setTarget(address)
+
+			// If bonding is currently in progress, delay a bit to avoid racing pairing UI.
+			val bondState = try {
+				val btMgr = appCtx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+				val adapter = btMgr?.adapter
+				val device = adapter?.getRemoteDevice(address)
+				device?.bondState ?: android.bluetooth.BluetoothDevice.BOND_NONE
+			} catch (_: Throwable) {
+				android.bluetooth.BluetoothDevice.BOND_NONE
+			}
+
+			if (bondState == android.bluetooth.BluetoothDevice.BOND_BONDING) {
+				logd("CONNECT-FAST: bonding in progress; delaying connect attempt 700ms")
+				mainHandler.postDelayed({ attempt(left) }, 700L)
+				return
+			}
+
+			ensureMgr().connect(address, connectTimeoutMs) { ok, err ->
+				logd("CONNECT-FAST: connect() callback ok=$ok err=$err")
+
+				if (!ok) {
+					if (left > 0) {
+						attempt(left - 1)
+					} else {
+						done(false, err ?: "Connect failed")
+					}
+					return@connect
+				}
+
+				setBleUp(true)
+
+				// Ensure CCCD/notifications are ready (your current implementation is a no-op,
+				// assuming BluetoothDeviceManager enables CCCD before reporting connect ok).
+				ensureNotificationsEnabled(address) { _, _ ->
+
+					waitForB0(totalTimeoutMs = b0TimeoutMs) { b0 ->
+						if (b0 == null) {
+							logd("CONNECT-FAST: No B0 within timeout")
+							if (left > 0) {
+								attempt(left - 1)
+							} else {
+								done(false, "No B0")
+							}
+							return@waitForB0
+						}
+
+						doBinaryHandshakeFromB0(address, b0) { okH, errH ->
+							_connected.postValue(okH)
+							if (okH) {
+								done(true, null)
+							} else {
+								logd("CONNECT-FAST: Handshake failed err=$errH")
+								if (left > 0) attempt(left - 1) else done(false, errH ?: "Handshake failed")
+							}
+						}
+					}
+				}
+			}
+		}
+
+		attempt(retries)
+	}
+
+	////////////////////////////////////////////////////////////////////
+	private val idleDisconnectRunnable = Runnable {
+		val isTransportUp = (bleConnected.value == true)
+		val isSecureUp = (_connected.value == true)
+
+		if (isTransportUp || isSecureUp) {
+			logd("IDLE: disconnecting after ${IDLE_DISCONNECT_MS}ms idle")
+			// IMPORTANT: do NOT suppress autoconnect here; idle drop is normal
+			disconnect(suppressMs = 0L)
+		}
+		idleDisconnectArmed = false
+	}
+
+	// Call this whenever you do "real work" (send / handshake / info / layout)
+	private fun bumpIdleTimer() {
+		idleHandler.removeCallbacks(idleDisconnectRunnable)
+		idleHandler.postDelayed(idleDisconnectRunnable, IDLE_DISCONNECT_MS)
+		idleDisconnectArmed = true
+	}
+
+	// Call this when you explicitly disconnect / want to stop timer
+	private fun cancelIdleTimer() {
+		idleHandler.removeCallbacks(idleDisconnectRunnable)
+		idleDisconnectArmed = false
+	}
+
+	////////////////////////////////////////////////////////////////////
 	fun disconnect(suppressMs: Long = 0L) {
+		cancelIdleTimer()
+		 
 		// Only suppress auto-connect when explicitly requested (plugin case)
 		if (suppressMs > 0) {
 			suppressAutoConnectFor(suppressMs)
@@ -936,6 +1131,9 @@ object BleHub
 			cb(false, "No device")
 			return
 		}
+		
+		bumpIdleTimer()
+		
 		val frame = byteArrayOf(op.toByte()) + u16le(payload.size) + payload
 		ensureMgr().writeOrConnect(addr, SERVICE_UUID, CHAR_UUID, frame, onResult = cb)
 	}
@@ -974,6 +1172,9 @@ object BleHub
 		logd( "RX: awaitNextFrame — stream START")
 		ensureMgr().startNotificationStream { chunk ->
 			if (done) return@startNotificationStream
+			
+			bumpIdleTimer() // prevents idle drop during long listening phases.
+			
 			val frames = framer.push(chunk)
 			val hit = frames.firstOrNull { predicate?.invoke(it) ?: true }
 			if (hit != null) 
@@ -1438,6 +1639,8 @@ object BleHub
 		val addr = currentAddress ?: PreferencesUtil.getOutputDeviceId(appCtx)
 			?: run { onResult(false, "No device"); return }
 
+		bumpIdleTimer()
+		
 		ensureMgr().writeOrConnect(addr, SERVICE_UUID, CHAR_UUID, b3) { okW, errW ->
 			onResult(okW, errW)
 		}		
@@ -1875,6 +2078,7 @@ object BleHub
 				
 				logd( "MTLS: session established (sid=$sid)")
 				
+				bumpIdleTimer()
 				onDone(true, null)
 			}
 		}
@@ -1959,7 +2163,7 @@ object BleHub
 								PreferencesUtil.setUseExternalKeyboardDevice(appCtx, true)
 								PreferencesUtil.setOutputDeviceDisabledByError(appCtx, false)
 	
-								onSecureSessionReady(addr, onDone)
+								onSecureSessionReady(addr, true, onDone)
 							}
 						}
 					}
@@ -1974,9 +2178,15 @@ object BleHub
 	////////////////////////////////////////////////////////////////////
 	private fun onSecureSessionReady(
 		addr: String,
+		fetchLayout: Boolean,
 		upstream: ((Boolean, String?) -> Unit)?
 	) {
 		_connected.postValue(true)
+
+		if (!fetchLayout) {
+			upstream?.invoke(true, null)
+			return
+		}
 
 		// Optional: query layout over secure channel and cache it
 		getLayout(timeoutMs = 4000L) { okInfo, layout, errInfo ->

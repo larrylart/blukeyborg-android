@@ -41,7 +41,7 @@ class OutputCredentialsService : Service() {
 
         // Optional behavior: disconnect after send like your plugin/popup does.
         // If you prefer to keep the session alive for repeated fills, set false.
-        private const val DISCONNECT_AFTER_SEND = true
+        private const val DISCONNECT_AFTER_SEND = false // was true now it is false - we rely on idle (5m disconnect) - not to have to reconnect every time
         private const val DISCONNECT_SUPPRESS_MS = 4000L
     }
 
@@ -224,38 +224,42 @@ class OutputCredentialsService : Service() {
 					latch.countDown()
 				}
 			} else {
-				BleHub.connectSelectedDevice { ok, err ->
-					if (!ok) {
-						rc.set(RC_CONNECT_FAIL)
-						Log.w(TAG, "connectSelectedDevice failed: ${err ?: "?"}")
+				// auto-pick any reachable provisioned dongle (fast), then send
+				BleHub.autoConnectForServices(
+					onReady = { ok: Boolean, err: String? ->
+						if (!ok) {
+							rc.set(RC_CONNECT_FAIL)
+							Log.w(TAG, "autoConnectForServices failed: ${err ?: "?"}")
 
-						if (DISCONNECT_AFTER_SEND) {
-							try {
-								BleHub.disconnect(suppressMs = DISCONNECT_SUPPRESS_MS)
-							} catch (t: Throwable) {
-								Log.w(TAG, "disconnect after connect-fail threw", t)
+							if (DISCONNECT_AFTER_SEND) {
+								try {
+									BleHub.disconnect(suppressMs = DISCONNECT_SUPPRESS_MS)
+								} catch (t: Throwable) {
+									Log.w(TAG, "disconnect after connect-fail threw", t)
+								}
 							}
+
+							latch.countDown()
+							return@autoConnectForServices
 						}
 
-						latch.countDown()
-						return@connectSelectedDevice
-					}
+						BleHub.sendStringAwaitHash(payload, timeoutMs = 8000L) { ok2: Boolean, err2: String? ->
+							rc.set(if (ok2) RC_OK else RC_SEND_FAIL)
+							if (!ok2) Log.w(TAG, "sendStringAwaitHash failed: ${err2 ?: "?"}")
 
-					BleHub.sendStringAwaitHash(payload, timeoutMs = 8000L) { ok2, err2 ->
-						rc.set(if (ok2) RC_OK else RC_SEND_FAIL)
-						if (!ok2) Log.w(TAG, "sendStringAwaitHash failed: ${err2 ?: "?"}")
-
-						if (DISCONNECT_AFTER_SEND) {
-							try {
-								BleHub.disconnect(suppressMs = DISCONNECT_SUPPRESS_MS)
-							} catch (t: Throwable) {
-								Log.w(TAG, "disconnect after send threw", t)
+							if (DISCONNECT_AFTER_SEND) {
+								try {
+									BleHub.disconnect(suppressMs = DISCONNECT_SUPPRESS_MS)
+								} catch (t: Throwable) {
+									Log.w(TAG, "disconnect after send threw", t)
+								}
 							}
-						}
 
-						latch.countDown()
+							latch.countDown()
+						}
 					}
-				}
+				)
+
 			}
 
 			// Block the AIDL thread briefly waiting for callbacks.

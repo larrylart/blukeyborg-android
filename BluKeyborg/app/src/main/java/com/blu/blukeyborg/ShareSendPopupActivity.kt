@@ -77,16 +77,18 @@ class ShareSendPopupActivity : AppCompatActivity() {
         } else {
             connectedByShare = true
             statusTv.text = "Connecting…"
-            BleHub.connectSelectedDevice { ok, err ->
-                runOnUiThread {
-                    if (!ok) {
-                        statusTv.text = "Failed: ${err ?: "connect"}"
-                        autoCloseSoon()
-                        return@runOnUiThread
-                    }
-                    doSend(statusTv, limited)
-                }
-            }
+			BleHub.autoConnectForServices(
+				onReady = { ok: Boolean, err: String? ->
+					runOnUiThread {
+						if (!ok) {
+							statusTv.text = "Failed: ${err ?: "connect"}"
+							autoCloseSoon()
+							return@runOnUiThread
+						}
+						doSend(statusTv, limited)
+					}
+				}
+			)
         }
     }
 

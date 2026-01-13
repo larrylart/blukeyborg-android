@@ -12,6 +12,7 @@
 		android:key="pref_output_dongle_connect"
 		android:title="@string/label_bt_pairing"
 		android:summary="@string/btn_connect_summary"
+		android:selectable="false"
 		app:layout="@layout/pref_row_button_start" />
 		
     <!-- NEW: Keyboard Layout -->

@@ -8,14 +8,18 @@
     android:paddingEnd="16dp"
     android:orientation="horizontal">
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/actionButton"
-        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-        android:layout_width="wrap_content"
-        android:layout_height="36dp"
-        android:minWidth="0dp"
-        android:textAllCaps="false"
-        android:text="@string/btn_pair" />
+	<com.google.android.material.button.MaterialButton
+		android:id="@+id/actionButton"
+		style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+		android:layout_width="wrap_content"
+		android:layout_height="wrap_content" 
+		android:minHeight="40dp"
+		android:minWidth="0dp"
+		android:paddingStart="16dp"
+		android:paddingEnd="16dp"
+		android:maxLines="1"
+		android:ellipsize="end"
+		android:textAllCaps="false" />
 
     <LinearLayout
         android:layout_width="0dp"

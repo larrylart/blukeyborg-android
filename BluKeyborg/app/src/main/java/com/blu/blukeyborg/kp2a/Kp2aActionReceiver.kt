@@ -171,23 +171,25 @@ class Kp2aActionReceiver : PluginActionBroadcastReceiver() {
         }
 
         // Use existing BLE send primitive (D0/D1)
-		BleHub.connectSelectedDevice { ok, err ->
-			if (!ok) {
-				toastMain(ctx, "BluKeyborg: connect failed (${err ?: "?"})", Toast.LENGTH_SHORT)
-				if (DISCONNECT_AFTER_SEND) disconnectSafe()
-				return@connectSelectedDevice
-			}
+		BleHub.autoConnectForServices(
+			onReady = { ok: Boolean, err: String? ->
+				if (!ok) {
+					toastMain(ctx, "BluKeyborg: connect failed (${err ?: "?"})", Toast.LENGTH_SHORT)
+					if (DISCONNECT_AFTER_SEND) disconnectSafe()
+					return@autoConnectForServices
+				}
 
-			BleHub.sendStringAwaitHash(payload) { ok2, err2 ->
-				toastMain(
-					ctx,
-					if (ok2) "Sent" else "Send failed (${err2 ?: "?"})",
-					Toast.LENGTH_SHORT
-				)
+				BleHub.sendStringAwaitHash(payload) { ok2: Boolean, err2: String? ->
+					toastMain(
+						ctx,
+						if (ok2) "Sent" else "Send failed (${err2 ?: "?"})",
+						Toast.LENGTH_SHORT
+					)
 
-				if (DISCONNECT_AFTER_SEND) disconnectSafe()
+					if (DISCONNECT_AFTER_SEND) disconnectSafe()
+				}
 			}
-		}
+		)
     }
 	
 	private fun disconnectSafe() {

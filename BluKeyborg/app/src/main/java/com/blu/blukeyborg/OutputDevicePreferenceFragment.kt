@@ -430,11 +430,11 @@ class OutputDevicePreferenceFragment : PreferenceFragmentCompat() {
         val saved = PreferencesUtil.getOutputDeviceId(requireContext())
         updateActionRow(saved)
 
-        // Pair/unpair click (row tap)
-        actionPref.setOnPreferenceClickListener {
-            handlePairUnpairClick()
-            true
-        }
+        // Pair/unpair click (row tap) - only make the button clickable 
+        //actionPref.setOnPreferenceClickListener {
+        //    handlePairUnpairClick()
+        //    true
+        //}
 
         // Pair/unpair click (button on the left)
         actionPref.onButtonClick = {
@@ -445,30 +445,53 @@ class OutputDevicePreferenceFragment : PreferenceFragmentCompat() {
     ////////////////////////////////////////////////////////////////////
     // Handles pair/unpair from both row + button.
     ////////////////////////////////////////////////////////////////////
-    private fun handlePairUnpairClick() {
-        val addr = PreferencesUtil.getOutputDeviceId(requireContext()).orEmpty()
-        if (addr.isBlank()) {
-            Toast.makeText(requireContext(), R.string.msg_select_first, Toast.LENGTH_SHORT).show()
-            return
-        }
+	private fun handlePairUnpairClick() {
+		val addr = PreferencesUtil.getOutputDeviceId(requireContext()).orEmpty()
+		if (addr.isBlank()) {
+			Toast.makeText(requireContext(), R.string.msg_select_first, Toast.LENGTH_SHORT).show()
+			return
+		}
 
-        val bonded = currentIsBonded(addr)
-        val ok = if (bonded) manager.unpair(addr) else manager.pair(addr)
+		val bonded = currentIsBonded(addr)
 
-        if (!ok) {
-            Toast.makeText(
-                requireContext(),
-                if (bonded) R.string.msg_unpair_failed else R.string.msg_pair_failed,
-                Toast.LENGTH_SHORT
-            ).show()
-        } else {
-            Toast.makeText(
-                requireContext(),
-                if (bonded) R.string.msg_unpairing else R.string.msg_pairing,
-                Toast.LENGTH_SHORT
-            ).show()
-        }
-    }
+		// UNPAIR 
+		if (bonded) {
+			val ok = manager.unpair(addr)
+
+			if (!ok) {
+				Toast.makeText(requireContext(), R.string.msg_unpair_failed, Toast.LENGTH_SHORT).show()
+				return
+			}
+
+			// drop transport + turn off "Use external keyboard device"
+			BleHub.disconnect(suppressMs = 10_000L) // optional but recommended to avoid immediate auto-reconnect
+			PreferencesUtil.setUseExternalKeyboardDevice(requireContext(), false)
+
+			// reflect state in UI
+			rowPref.setSwitchChecked(false)
+			actionPref.isEnabled = false
+			deviceTypePref?.isEnabled = false
+			layoutPref?.isEnabled = false
+			volumeUpPref?.isEnabled = false
+			volumeDownPref?.isEnabled = false
+			remoteActionsPanelPref?.isEnabled = false
+
+			// refresh button label/state immediately
+			updateActionRow(addr)
+
+			Toast.makeText(requireContext(), R.string.msg_unpairing, Toast.LENGTH_SHORT).show()
+			return
+		}
+
+		// PAIR  
+		val ok = manager.pair(addr)
+		Toast.makeText(
+			requireContext(),
+			if (ok) R.string.msg_pairing else R.string.msg_pair_failed,
+			Toast.LENGTH_SHORT
+		).show()
+	}
+
 
     ////////////////////////////////////////////////////////////////////
     // Lifecycle

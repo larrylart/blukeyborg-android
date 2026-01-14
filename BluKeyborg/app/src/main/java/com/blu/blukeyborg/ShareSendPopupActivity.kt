@@ -35,7 +35,7 @@ class ShareSendPopupActivity : AppCompatActivity() {
         val statusTv = findViewById<TextView>(R.id.tvStatus)
         //val previewTv = findViewById<TextView>(R.id.tvPreview)
 
-        // Respect your toggle
+        // Respect toggle
         if (!PreferencesUtil.allowShareInput(this)) {
             Toast.makeText(this, "Share input disabled in settings", Toast.LENGTH_SHORT).show()
             finish()

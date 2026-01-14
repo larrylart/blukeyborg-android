@@ -1,29 +1,9 @@
 ///////////////////////////////////////////////////////////////////////
 // BleAppSec
-//
-// Secure storage for per-device 32-byte APPKEYs.
-//
-// Purpose:
-//   - APPKEY is required for MTLS handshake with the dongle.
-//   - We must NOT store APPKEY plaintext in SharedPreferences.
-//   - Instead we encrypt the APPKEY with a per-device RSA keypair
-//     stored inside AndroidKeyStore (private key is non-exportable).
-//
-// Compatibility:
-//   - Supports Android 4.4 (minSdk 19) to Android 13+.
-//   - Uses RSA/ECB/PKCS1Padding because this mode is the ONLY one
-//     guaranteed to exist on API 19–22.
-//   - APPKEY = 32 bytes - fits easily in RSA-2048 limit.
-//
-// Design:
-//   - One RSA keypair per deviceId (alias derived from hashed deviceId).
-//   - Ciphertext is stored Base64-encoded in SharedPreferences.
-//   - We keep RSA private keys even after clearKey(), so reconnecting
-//     the same dongle does NOT require regenerating a keypair.
-//
-// Notes:
-//   - Public key encrypts, private key decrypts.
-//   - This class has no BLE knowledge -  BleHub uses it as secure storage.
+// Stores per-device 32-byte APPKEY using AndroidKeyStore RSA.
+// Ciphertext is kept in SharedPreferences; private key remains non-exportable.
+// Alias/prefs keys are derived from a hash of deviceId.
+// clearKey() removes prefs only - keystore entries are retained.
 ///////////////////////////////////////////////////////////////////////
 package com.blu.blukeyborg
 
@@ -80,14 +60,9 @@ object BleAppSec
     private fun ksAlias(deviceId: String) = "ble_appsec_rsa_${slotId(deviceId)}"
 
     /////////////////////////////////////////////////////////////////
-    // ensureRsaKeyPair():
-    //   Creates an RSA keypair in AndroidKeyStore if it does not
-    //   already exist for this alias.
-    //
-    //   Uses KeyPairGeneratorSpec because it works from API 19–22
-    //   and remains supported on later versions.
-    //
-    //   RSA private key never leaves secure hardware storage.
+	// Creates the RSA keypair if missing.
+	// API >= 23 uses KeyGenParameterSpec; older devices use KeyPairGeneratorSpec.
+	// Private key is kept non-exportable in AndroidKeyStore.
     /////////////////////////////////////////////////////////////////
     private fun ensureRsaKeyPair(context: Context, alias: String) {
         val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
@@ -117,7 +92,7 @@ object BleAppSec
                 kpg.generateKeyPair()
                 Log.d(TAG, "ensureRsaKeyPair: generated RSA keypair with KeyGenParameterSpec for alias=$alias")
             } else {
-                // Legacy path for API < 23 – keep your existing KeyPairGeneratorSpec
+                // API < 23 path: KeyPairGeneratorSpec
                 val start = Calendar.getInstance()
                 val end = Calendar.getInstance().apply { add(Calendar.YEAR, 30) }
                 val spec = android.security.KeyPairGeneratorSpec.Builder(context)
@@ -238,6 +213,10 @@ object BleAppSec
     fun clearKey(context: Context, deviceId: String) 
 	{
         sp(context).edit().remove(prefKey(deviceId)).apply()
-        // We keep the RSA key so future re-pairs don't require re-gen; remove if you prefer.
+        // Keystore entry is retained-  only the stored ciphertext is removed.
     }
+	
+	// helper
+	fun hasAppKey(context: Context, deviceId: String): Boolean =
+		getKey(context, deviceId) != null	
 }

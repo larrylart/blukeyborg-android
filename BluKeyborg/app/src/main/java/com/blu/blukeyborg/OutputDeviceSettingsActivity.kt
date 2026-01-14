@@ -32,10 +32,10 @@ class OutputDeviceSettingsActivity : AppCompatActivity() {
             val imeInsets = insets.getInsets(WindowInsetsCompat.Type.ime())
             val systemBarsInsets = insets.getInsets(WindowInsetsCompat.Type.systemBars())
 
-            // Your logic here is correct: Use the larger of the nav bar height or IME height for bottom padding.
+            // use the larger of the nav bar height or IME height for bottom padding.
             val bottomPadding = max(systemBarsInsets.bottom, imeInsets.bottom)
 
-            // Apply padding to your root view to prevent content from being obscured
+            // Apply padding to root view to prevent content from being obscured
             // by the status bar (top) or the IME (bottom).
             v.setPadding(
                 systemBarsInsets.left,

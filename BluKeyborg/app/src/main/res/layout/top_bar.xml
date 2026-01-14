@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/topBar"
+    android:layout_width="match_parent"
+	android:layout_height="wrap_content"
+	android:minHeight="48dp"
+    android:orientation="horizontal"
+    android:background="@color/blue_700"
+    android:gravity="center_vertical"
+    android:paddingStart="12dp"
+    android:paddingEnd="12dp">
+
+    <ImageButton
+        android:id="@+id/btnSettingsTop"
+        android:layout_width="36dp"
+        android:layout_height="36dp"
+        android:background="@android:color/transparent"
+        android:padding="6dp"
+		android:tint="@android:color/white"
+        android:src="@drawable/baseline_settings_24"
+        android:contentDescription="Settings" />
+
+    <LinearLayout
+        android:id="@+id/titleCluster"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="horizontal"
+        android:gravity="center">
+
+		<View
+			android:id="@+id/ledDot"
+			android:layout_width="14dp"
+			android:layout_height="14dp"
+			android:layout_marginEnd="8dp"
+			android:background="@drawable/led_dot" />
+
+        <TextView
+            android:id="@+id/titleText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+			android:textColor="@android:color/white"
+            android:text="@string/app_name"
+            android:textSize="20sp" />
+    </LinearLayout>
+
+    <ImageButton
+        android:id="@+id/btnCloseTop"
+        android:layout_width="36dp"
+        android:layout_height="36dp"
+        android:background="@android:color/transparent"
+        android:padding="6dp"
+		android:tint="@android:color/white"
+        android:src="@drawable/baseline_close_24_white"
+        android:contentDescription="Close" />
+
+</LinearLayout>

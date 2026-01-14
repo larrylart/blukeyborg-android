@@ -3,10 +3,10 @@ package com.blu.blukeyborg
 import android.content.Context
 import android.widget.Toast
 
-/**
- * Shared logic to map volume up/down to HID key taps,
- * based on user preferences.
- */
+////////////////////////////////////////////////////////////////////
+// Shared logic to map volume up/down to HID key taps,
+// based on user preferences.
+////////////////////////////////////////////////////////////////////
 object VolumeKeyActions {
 
     enum class Action(val prefValue: String) {
@@ -72,10 +72,10 @@ object VolumeKeyActions {
         }
     }
 
-    /**
-     * Called from any Activity that wants to handle volume keys.
-     * Returns true if we handled it (and consumed the volume event).
-     */
+    ////////////////////////////////////////////////////////////////////
+    // Called from any Activity that wants to handle volume keys.
+    // Returns true if we handled it (and consumed the volume event).
+    ////////////////////////////////////////////////////////////////////
     fun handleVolumeKey(context: Context, isVolumeUp: Boolean): Boolean {
         val action = resolveAction(context, isVolumeUp)
         if (action == Action.NONE) return false  // let system handle
@@ -94,7 +94,7 @@ object VolumeKeyActions {
             Action.ENTER      -> 0x28  // Enter
 
             // Media / consumer – standard HID Consumer usages (page 0x0C)
-            // Your dongle firmware should map these to a consumer control report.
+            // dongle firmware maps these to a consumer control report.
             Action.PLAY         -> 0x00CD  // Play/Pause
             Action.STOP         -> 0x00B7  // Stop
             Action.NEXT_TRACK   -> 0x00B5  // Next Track

@@ -137,7 +137,7 @@ class Kp2aActionReceiver : PluginActionBroadcastReceiver() {
     override fun actionSelected(a: ActionSelectedAction) {
         val ctx = a.context
 
-        // Your existing settings must point to a dongle
+        // settings point to a dongle
         if (!PreferencesUtil.useExternalKeyboardDevice(ctx) || PreferencesUtil.getOutputDeviceId(ctx).isNullOrBlank()) {
             toastMain(ctx, "BluKeyborg: select/enable output device first", Toast.LENGTH_LONG)
             return

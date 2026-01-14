@@ -26,7 +26,7 @@ class LabeledSwitchPreference @JvmOverloads constructor(
         val sw = holder.findViewById(R.id.rowSwitch) as? MaterialSwitch
         switchView = sw
 
-        // Title comes from android:title in your preference XML
+        // title from android:title 
         titleView?.text = title ?: ""
 
         val checked = getPersistedBoolean(false)
@@ -50,7 +50,7 @@ class LabeledSwitchPreference @JvmOverloads constructor(
         }
     }
 
-    /** Optional helper if you ever need to flip it from code */
+    // Programmatically set the switch state without triggering the listener
     fun setCheckedFromCode(value: Boolean) {
         persistBoolean(value)
         suppressListener = true

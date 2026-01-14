@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/typeRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="0dp">
+
+    <!-- Content area -->
+    <LinearLayout
+        android:id="@+id/contentContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:padding="12dp">
+
+        <TextView
+            android:id="@+id/historyLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/label_history"
+            android:textStyle="bold"
+            android:textSize="18sp"
+            android:gravity="center_horizontal"
+            android:paddingTop="8dp"
+            android:paddingBottom="4dp" />
+
+        <ScrollView
+            android:id="@+id/historyScroll"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:fillViewport="true"
+            android:overScrollMode="ifContentScrolls">
+
+            <LinearLayout
+                android:id="@+id/historyContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+        </ScrollView>
+
+		<LinearLayout
+			android:layout_width="match_parent"
+			android:layout_height="wrap_content"
+			android:orientation="horizontal"
+			android:gravity="center_vertical"
+			android:layout_marginTop="8dp"
+			android:layout_marginBottom="0dp">
+
+			<EditText
+				android:id="@+id/inputEdit"
+				android:layout_width="0dp"
+				android:layout_height="wrap_content"
+				android:layout_weight="1"
+				android:hint="@string/hint_input_text"
+				android:inputType="textMultiLine"
+				android:minLines="1"
+				android:maxLines="3"
+				android:gravity="top|start" />
+
+			<ImageButton
+				android:id="@+id/btnSendInline"
+				android:layout_width="40dp"
+				android:layout_height="40dp"
+				android:layout_marginStart="8dp"
+				android:background="?attr/selectableItemBackgroundBorderless"
+				android:contentDescription="@string/btn_send"
+				android:src="@android:drawable/ic_menu_send"
+				android:tint="@android:color/black" />
+		</LinearLayout>
+
+
+    </LinearLayout>
+</LinearLayout>

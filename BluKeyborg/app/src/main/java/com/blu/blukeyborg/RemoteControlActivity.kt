@@ -22,14 +22,13 @@ import kotlin.math.max
 
 class RemoteControlActivity : AppCompatActivity() {
 
-    // Local session flag for this activity; we don't share MainActivity's
-    // boolean, but BleHub.enableFastKeys is idempotent at the dongle side.
+	// Tracks whether fast-keys mode has been enabled for this session
     private var fastKeysEnabled: Boolean = false
 
     // keep a reference so we can update text dynamically
     private lateinit var bodyText: TextView
 
-    // container for the dynamic remote panel
+    // Holds the current remote panel layout
     private lateinit var panelContainer: LinearLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -195,12 +194,12 @@ class RemoteControlActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Media panel styled like your iPhone screenshot:
-     * Row1: Rew / Stop / Play / FF
-     * Row2: Prev / Next (wide)
-     * Row3: Mute / Vol- / Vol+
-     */
+    ////////////////////////////////////////////////////////////////
+    // Media panel 
+    // Row1: Rew / Stop / Play / FF
+    // Row2: Prev / Next (wide)
+    // Row3: Mute / Vol- / Vol+
+    ////////////////////////////////////////////////////////////////
 	// baseline_volume_up_24 baseline_volume_down_24 outline_play_pause_24 baseline_stop_24
     private fun buildMediaPanel() {
         // Row 1 (4 tiles)
@@ -247,10 +246,9 @@ class RemoteControlActivity : AppCompatActivity() {
         ))
     }
 
-    /**
-     * Simple presentation panel (optional — you already asked for it earlier).
-     * You can refine icons later.
-     */
+    ////////////////////////////////////////////////////////////////
+    // Simple presentation panel 
+    ////////////////////////////////////////////////////////////////
     private fun buildPresentationPanel() {
         panelContainer.addView(buildRow(
             remoteTile(android.R.drawable.ic_media_play, "Start", square = false) { sendKey(0x28 /*Enter*/) },
@@ -294,15 +292,7 @@ class RemoteControlActivity : AppCompatActivity() {
             )
         }
 
-    /**
-     * A "tile" button:
-     * - rounded purple background
-     * - system icon centered
-     * - small label underneath
-     *
-     * square=true -> square-ish tile (like top row / bottom row)
-     * square=false -> wide tile (like Prev/Next row)
-     */
+    ////////////////////////////////////////////////////////////////
     private fun remoteTile(iconRes: Int, label: String, square: Boolean, onTap: () -> Unit): View {
         val bg = GradientDrawable().apply {
             cornerRadius = dp(14).toFloat()

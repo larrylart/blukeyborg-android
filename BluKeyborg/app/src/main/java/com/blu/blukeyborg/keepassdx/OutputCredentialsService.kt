@@ -39,7 +39,7 @@ class OutputCredentialsService : Service() {
         private const val RC_TIMEOUT = -7
         private const val RC_EMPTY = -8
 
-        // Optional behavior: disconnect after send like your plugin/popup does.
+        // Optional behavior: disconnect after send 
         // If you prefer to keep the session alive for repeated fills, set false.
         private const val DISCONNECT_AFTER_SEND = false // was true now it is false - we rely on idle (5m disconnect) - not to have to reconnect every time
         private const val DISCONNECT_SUPPRESS_MS = 4000L

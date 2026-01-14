@@ -80,6 +80,15 @@
 
 	<string name="title_remote_actions_panel">Remote Actions</string>
 	<string name="summary_remote_actions_panel">Choose which remote panel to show</string>
-	
+
+	<!-- new devices layout -->	
+	<string name="btn_devices">Devices</string>
+
+	<string name="title_devices">Devices</string>
+	<string name="devices_empty">No devices available (paired, provisioned, or in range).\n\nMake sure your BluKeyboard dongle is powered on and nearby.</string>
+	<string name="back">Back</string>
+
+	<string name="device_setup">Setup</string>
+	<string name="device_forget">Forget device</string>
 
 </resources>

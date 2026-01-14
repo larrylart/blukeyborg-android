@@ -34,7 +34,12 @@ import com.blu.blukeyborg.BuildConfig
 
 // Lightweight summary used in the device picker and auto-connect logic.
 // "bonded" is purely informational here. pairing is controlled separately.
-data class BtDevice(val name: String, val address: String, val bonded: Boolean)
+data class BtDevice(
+    val name: String,
+    val address: String,
+    val bonded: Boolean,
+    val rssi: Int? = null
+)
 
 ////////////////////////////////////////////////////////////////////
 // Context is the app Context, used for:
@@ -123,22 +128,43 @@ class BluetoothDeviceManager(private val context: Context)
 	// Note: This does NOT start a BLE scan - it's just a query to the
 	// system's bondedDevices set. We swallow SecurityException in case
 	// BLUETOOTH_CONNECT permission is missing.	
-    @SuppressLint("MissingPermission")
-    @RequiresPermission(allOf = [Manifest.permission.BLUETOOTH_CONNECT])
-    fun refreshBonded() {
-        val bonded = try { adapter?.bondedDevices.orEmpty() } catch (_: SecurityException) { emptySet() }
-        var changed = false
-        for (d in bonded) {
-            val name = d.name ?: "Unknown"
-            val updated = BtDevice(name, d.address, true)
-            val prev = devicesMap[d.address]
-            if (prev == null || prev != updated) {
-                devicesMap[d.address] = updated
-                changed = true
-            }
-        }
-        if (changed) postList()
-    }
+	@SuppressLint("MissingPermission")
+	@RequiresPermission(allOf = [Manifest.permission.BLUETOOTH_CONNECT])
+	fun refreshBonded() {
+		val bonded = try { adapter?.bondedDevices.orEmpty() } catch (_: SecurityException) { emptySet() }
+		var changed = false
+
+		// Only keep bonded devices that look like "our" dongles:
+		//  - selected output device, OR
+		//  - already provisioned (has APPKEY stored)
+		val selected = PreferencesUtil.getOutputDeviceId(context)
+
+		for (d in bonded) {
+			val addr = d.address ?: continue
+
+			val isSelected = selected != null && addr.equals(selected, ignoreCase = true)
+			val isProvisioned = try { BleAppSec.getKey(context.applicationContext, addr) != null } catch (_: Throwable) { false }
+
+			if (!isSelected && !isProvisioned) continue
+
+			val prev = devicesMap[addr]
+
+			// Keep a good name if bonded device name is temporarily null
+			val name = d.name ?: (prev?.name ?: "Unknown")
+
+			// IMPORTANT: preserve last-known RSSI from scan results
+			val preservedRssi = prev?.rssi
+
+			val updated = BtDevice(name, addr, true, preservedRssi)
+
+			if (prev == null || prev != updated) {
+				devicesMap[addr] = updated
+				changed = true
+			}
+		}
+
+		if (changed) postList()
+	}
 
 	// Publish the current devicesMap as a sorted list via LiveData.
 	//
@@ -277,31 +303,73 @@ class BluetoothDeviceManager(private val context: Context)
 	// if rssiTargets is non-null.
 	////////////////////////////////////////////////////////////////
     private val scanCb = object : ScanCallback() {
-        @SuppressLint("MissingPermission")
-        override fun onScanResult(callbackType: Int, result: ScanResult) {
-            val dev = result.device ?: return
-            val address = dev.address ?: return
-            val name = dev.name ?: result.scanRecord?.deviceName ?: "Unknown"
-            val bonded = try { dev.bondState == BluetoothDevice.BOND_BONDED } catch (_: SecurityException) { false }
+		@SuppressLint("MissingPermission")
+		override fun onScanResult(callbackType: Int, result: ScanResult) {
+			val dev = result.device ?: return
+			val address = dev.address ?: return
+			val name = dev.name ?: result.scanRecord?.deviceName ?: "Unknown"
+			val bonded = try { dev.bondState == BluetoothDevice.BOND_BONDED } catch (_: SecurityException) { false }
 
-            val existing = devicesMap[address]
-            val updated = BtDevice(name, address, bonded)
-            if (existing == null || existing != updated) {
-                devicesMap[address] = updated
-                postList()
-            }
-			
-            // If we are in RSSI-scan mode, track the strongest RSSI per target device address.
-            rssiTargets?.let { targets ->
-                if (targets.contains(address)) {
-                    val rssi = result.rssi
-                    val prev = rssiMap[address]
-                    if (prev == null || rssi > prev) {
-                        rssiMap[address] = rssi
-                    }
-                }
-            }			
-        }
+			// --- BK filter (strict + compatible) ---
+			val targets = rssiTargets
+			val isRssiTarget = targets?.contains(address) == true
+
+			// We require manufacturer specific data under companyId 0xFFFF
+			// NOTE: depending on stack, Android may return:
+			//  - payload-only: "BK ..." (10 bytes)
+			//  - raw bytes:    "FF FF BK ..." (12 bytes)
+			val mfg = try { result.scanRecord?.getManufacturerSpecificData(0xFFFF) } catch (_: Throwable) { null }
+
+			val hasBkMfg = when {
+				mfg == null -> false
+
+				// Normal case: payload-only (no companyId in returned array)
+				mfg.size == 10 &&
+					mfg[0] == 'B'.code.toByte() &&
+					mfg[1] == 'K'.code.toByte() -> true
+
+				// Compatibility case: returned array still includes companyId prefix
+				mfg.size == 12 &&
+					(mfg[0].toInt() and 0xFF) == 0xFF &&
+					(mfg[1].toInt() and 0xFF) == 0xFF &&
+					mfg[2] == 'B'.code.toByte() &&
+					mfg[3] == 'K'.code.toByte() -> true
+
+				else -> false
+			}
+
+			val isBk = hasBkMfg || isRssiTarget
+			if (!isBk) return
+			// --- end BK filter ---
+
+			val existing = devicesMap[address]
+			val updated = BtDevice(name, address, bonded, result.rssi)
+
+			val shouldUpdate = when {
+				existing == null -> true
+				existing.name != updated.name -> true
+				existing.bonded != updated.bonded -> true
+				existing.rssi == null || updated.rssi == null -> existing.rssi != updated.rssi
+				kotlin.math.abs(existing.rssi - updated.rssi) >= 4 -> true
+				else -> false
+			}
+
+			if (shouldUpdate) {
+				devicesMap[address] = updated
+				postList()
+			}
+
+			targets?.let {
+				if (it.contains(address)) {
+					val rssi = result.rssi
+					val prev = rssiMap[address]
+					if (prev == null || rssi > prev) {
+						rssiMap[address] = rssi
+					}
+				}
+			}
+		}
+
     }
 
 	////////////////////////////////////////////////////////////////
@@ -758,7 +826,7 @@ class BluetoothDeviceManager(private val context: Context)
 					*/
 					
 					// Optional MTU hint – see next section
-					val wantMtu = 185 // or 185/247 if your testing says it's stable				
+					val wantMtu = 185 // or 185/247 - check if stable				
 					if (android.os.Build.VERSION.SDK_INT >= 21) {
 						try {
 							logd("requestMtu($wantMtu)")
@@ -1139,6 +1207,9 @@ class BluetoothDeviceManager(private val context: Context)
 	// the GATT and reset all associated state.
 	////////////////////////////////////////////////////////////////////
 	fun disconnect() {
+				
+		logd("AUTO_DISCONNECT: " + Throwable().stackTrace.firstOrNull())
+		
 		intentionalDisconnect = true
 		connecting = false
 		bleConnected.postValue(false)

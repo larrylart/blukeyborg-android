@@ -6,6 +6,10 @@
         android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
+	<uses-permission
+		android:name="android.permission.ACCESS_FINE_LOCATION"
+		android:maxSdkVersion="30" />
+
 <!-- no need for this
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
@@ -26,6 +30,11 @@
             android:name="com.blu.blukeyborg.OutputDeviceSettingsActivity"
             android:exported="false"
             android:label="@string/title_output_device" />
+
+		<activity
+			android:name=".DevicesActivity"
+			android:exported="false"
+			android:label="@string/title_devices" />
 
         <activity
             android:name=".MainActivity"
@@ -52,7 +61,7 @@
 			android:turnScreenOn="true"
 			android:excludeFromRecents="true"
 			android:launchMode="singleTask"
-			android:theme="@style/Theme.BluKeyborg">
+			android:theme="@style/Theme.BluKeyborg.Remote.Transparent">
 		</activity>	
 		
 		<!-- share input -->

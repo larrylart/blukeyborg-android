@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/bottomBar"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingTop="0dp"
+	android:paddingBottom="8dp"
+    android:paddingStart="16dp"
+    android:paddingEnd="16dp">
+		
+    <!-- Type (navigate to TypeFragment) -->
+    <ImageButton
+        android:id="@+id/btnType"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+		android:padding="6dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="Type"
+        android:src="@drawable/outline_text_ad_24"
+        android:tint="@android:color/black"
+        android:layout_marginEnd="16dp" />
+
+    <!-- Special keys -->
+    <ImageButton
+        android:id="@+id/btnSpecialKeys"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+		android:padding="6dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/btn_special_keys"
+        android:src="@drawable/sharp_grid_view_24"
+        android:tint="@android:color/black"
+        android:layout_marginStart="8dp"
+        android:layout_marginEnd="16dp" />
+
+    <!-- Full keyboard (your existing feature) -->
+    <ImageButton
+        android:id="@+id/btnFullKeyboard"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+		android:padding="6dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/btn_full_keyboard"
+        android:src="@drawable/baseline_keyboard_24"
+        android:tint="@android:color/black" />
+		
+    <!-- Remote -->
+    <ImageButton
+        android:id="@+id/btnRemoteBottom"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+		android:padding="6dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="Remote"
+        android:src="@drawable/outline_tv_remote_24"
+        android:tint="@android:color/black"
+        android:layout_marginEnd="16dp" />		
+
+    <View
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+
+    <!-- Devices -->
+    <ImageButton
+        android:id="@+id/btnDevices"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+		android:padding="6dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/btn_devices"
+        android:src="@drawable/baseline_devices_24"
+        android:tint="@android:color/black"
+        android:layout_marginEnd="16dp" />
+
+
+</LinearLayout>

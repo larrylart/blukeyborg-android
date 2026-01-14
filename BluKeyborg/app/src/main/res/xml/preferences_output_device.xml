@@ -1,20 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
-
-    <!-- Custom Material row (outlined dropdown + inline switch) -->
-    <com.blu.blukeyborg.OutputDeviceRowPreference
-        android:key="pref_output_dongle_row"
-        app:layout="@layout/pref_output_device_row" />
-
-	<!-- Pair/Unpair action -->
-	<com.blu.blukeyborg.ActionButtonStartPreference
-		android:key="pref_output_dongle_connect"
-		android:title="@string/label_bt_pairing"
-		android:summary="@string/btn_connect_summary"
-		android:selectable="false"
-		app:layout="@layout/pref_row_button_start" />
 		
+	<com.blu.blukeyborg.LabeledSwitchPreference
+		android:key="@string/settings_output_device_key"
+		android:title="Enable Device Connection"
+		android:defaultValue="false" />
+				
     <!-- NEW: Keyboard Layout -->
     <com.blu.blukeyborg.SimpleDropdownPreference
         android:key="@string/pref_keyboard_layout_key"

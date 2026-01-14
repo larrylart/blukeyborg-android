@@ -9,7 +9,7 @@ class BluKeyborgApp : Application() {
         super.onCreate()
 		AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
         BleHub.init(this)
-		// clear auto-connect suppression in case you cycle on app stop/start fasd
+		// clear auto-connect suppression in case you cycle on app stop/start fast
 		BleHub.clearAutoConnectSuppress()
     }
 }

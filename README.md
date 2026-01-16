@@ -14,8 +14,7 @@ provisioning flow**, and tighter integration with recent firmware changes.
 For firmware releases, supported hardware, setup instructions, and technical details
 about the dongle itself, see the main repository:
 
-👉 **Blue Keyboard (Dongle & Firmware)**  
-https://github.com/larrylart/blue_keyboard
+👉 **Blue Keyboard (Dongle & Firmware)**  https://github.com/larrylart/blue_keyboard
 
 ---
 

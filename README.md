@@ -11,6 +11,12 @@ provisioning flow**, and tighter integration with recent firmware changes.
 > BluKeyborg v2.0 **requires Blue Keyboard firmware v2.1.0 or newer**.  
 > Devices running older firmware will not be visible in the new device list.
 
+For firmware releases, supported hardware, setup instructions, and technical details
+about the dongle itself, see the main repository:
+
+👉 **Blue Keyboard (Dongle & Firmware)**  
+https://github.com/larrylart/blue_keyboard
+
 ---
 
 ## 📱 App Overview (v2.0)
@@ -118,7 +124,7 @@ The changes in v2.0 are primarily **UX and flow improvements**, not a protocol r
 ## 📦 Installation
 
 ### 1. Download the APK
-From GitHub Releases: **Releases → BluKeyborg v2.0**
+From GitHub Releases: [**Releases → BluKeyborg v2.0**](https://github.com/larrylart/blukeyborg-android/releases/tag/v2.0.0)
 
 ---
 

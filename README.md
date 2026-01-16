@@ -118,9 +118,7 @@ The changes in v2.0 are primarily **UX and flow improvements**, not a protocol r
 ## 📦 Installation
 
 ### 1. Download the APK
-From GitHub Releases:
-
-**Releases → BluKeyborg v2.0**
+From GitHub Releases: **Releases → BluKeyborg v2.0**
 
 ---
 

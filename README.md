@@ -87,8 +87,8 @@ Some updates and refinements were made to the **special keys panel** and the
 - Layout and behavior adjustments
 - Early iteration on usability improvements
 
-![Full Keyboard](doc/BluKeyborg_full_keyboard.jpg)
 ![Special Keys Panel](doc/BluKeyborg_special_keys.jpg)
+![Full Keyboard](doc/BluKeyborg_full_keyboard.jpg)
 
 > ⚠️ These areas are still **work in progress**.  
 > The long-term direction depends on user feedback and actual usage patterns.
